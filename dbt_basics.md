@@ -116,3 +116,114 @@ Documentation is crucial for maintaining and understanding your dbt project. Her
    dbt docs generate
    dbt docs serve
    ```
+
+## 6. Modularization
+
+<p>DBT encourages a modular approach to data transformation. You can break down transformation logic into discrete units called models. Each model typically represents a table or a view in your data warehouse.</p>
+
+**Example**: Transforming raw data from an `orders` table into a new `monthly_sales` table.
+
+Create a new model file `monthly_sales.sql` in the `models` directory:
+
+```sql
+-- models/monthly_sales.sql
+select
+    date_trunc('month', order_date) as month,
+    sum(total_amount) as total_sales
+from
+    {{ ref('orders') }}
+group by
+    1;
+```
+
+Here, `{{ ref('orders') }}` is a reference to another model or table named `orders`.
+
+## 7. Dependency Management
+
+<p>DBT automatically manages dependencies between models. When defining a model, you specify the models it depends on.</p>
+
+**Example**: The `monthly_sales` model depends on the `orders` model.
+
+```sql
+-- models/monthly_sales.sql
+select
+    date_trunc('month', order_date) as month,
+    sum(total_amount) as total_sales
+from
+    {{ ref('orders') }}
+group by
+    1;
+```
+
+DBT ensures that the `orders` model is built before the `monthly_sales` model.
+
+## 8. Version Control
+
+DBT projects are typically version-controlled using Git. This allows teams to collaborate effectively, track changes, and revert to previous versions if needed.
+
+**Example**: Initializing a DBT project with Git.
+
+```bash
+cd /path/to/dbt_project
+git init
+git add .
+git commit -m "Initial commit"
+```
+
+## 9. Testing
+
+DBT includes a testing framework that allows you to define tests to validate your data transformations. You can write tests to ensure that the output of your models meets certain criteria.
+
+**Example**: Ensure that the `monthly_sales` table contains only positive sales values.
+
+Create a test file `monthly_sales_test.sql` in the `tests` directory:
+
+```sql
+-- tests/monthly_sales_test.sql
+select
+    count(*)
+from
+    {{ ref('monthly_sales') }}
+where
+    total_sales < 0;
+```
+
+Run the test using DBT:
+
+```bash
+dbt test
+```
+
+## 10. Execution
+
+You can execute your data transformations with DBT commands. These commands can be run from the command line or integrated into your CI/CD pipeline.
+
+**Example**: Running a DBT project.
+
+```bash
+dbt run
+```
+
+## 11. Incremental Builds
+
+DBT supports incremental builds, which means it can identify and rebuild only the models that have changed since the last run. This can significantly reduce the time it takes to build your data transformations.
+
+**Example**: Configuring an incremental model for `monthly_sales`.
+
+```sql
+-- models/monthly_sales.sql
+{{ config(
+    materialized='incremental',
+    unique_key='month'
+) }}
+
+select
+    date_trunc('month', order_date) as month,
+    sum(total_amount) as total_sales
+from
+    {{ ref('orders') }}
+where
+    order_date > (select max(month) from {{ this }})
+group by
+    1;
+```
