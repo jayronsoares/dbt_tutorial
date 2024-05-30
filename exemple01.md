@@ -1,6 +1,3 @@
-### Overview:
-This example demonstrates an ETL (Extract, Transform, Load) pipeline implemented in Python for migrating data from an on-premises PostgreSQL database to Snowflake, with data transformation handled by dbt (data build tool).
-
 ### Steps:
 1. **Data Extraction**: Data is extracted from the on-premises PostgreSQL database using `pg_dump` command line utility.
 2. **Data Loading**: The extracted data is loaded into an AWS RDS PostgreSQL database using `psql` command line utility.
