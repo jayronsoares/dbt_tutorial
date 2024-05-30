@@ -13,6 +13,9 @@ This example demonstrates an ETL (Extract, Transform, Load) pipeline implemented
 - **Configuration Management**: Configuration details such as database connections and credentials are stored in environment variables and YAML configuration files (`profiles.yml`). This allows for easy customization and adaptation of the ETL pipeline for different environments.
 - **Lazy Evaluation**: Although not extensively utilized in this example, lazy evaluation principles can be applied to handle streams of data efficiently, especially in scenarios with large datasets.
 
+You're right. Let's include access to the staging PostgreSQL database in the `profiles.yml` file for dbt, and also import necessary modules in the Python script. Here's the updated version:
+
+```python
 import os
 import subprocess
 import yaml
@@ -45,18 +48,18 @@ def configure_dbt_profile(profile_name, host, user, password, dbname, port, sche
                 'dev': {
                     'type': 'postgres',
                     'host': localhost,
-                    'user': retail_admin,
-                    'password': retail_pwd,
-                    'dbname': retail_dev,
+                    'user': user,
+                    'password': password,
+                    'dbname': dbname,
                     'port': 5432,
                     'schema': public
                 },
                 'staging': {
                     'type': 'postgres',
                     'host': 'staging-db.example.com',
-                    'user': 'staging_user',
-                    'password': 'staging_pwd',
-                    'dbname': 'staging_db',
+                    'user': 'your_staging_user',
+                    'password': 'your_staging_password',
+                    'dbname': 'retail_stg_db',
                     'port': '5432',
                     'schema': 'public'
                 }
@@ -113,9 +116,9 @@ def configure_snowflake_profile(profile_name, account, user, password, role, war
                     'account': your_account.region.snowflakecomputing.com,
                     'user': user,
                     'password': password,
-                    'role': role,
-                    'warehouse': snowflake_warehouse,
-                    'database': snowflake_db,
+                    'role': retail_role,
+                    'warehouse': warehouse,
+                    'database': database,
                     'schema': public,
                     'threads': 1,
                     'client_session_keep_alive': False
@@ -189,7 +192,7 @@ def main():
             role='your_snowflake_role',
             warehouse='your_snowflake_warehouse',
             database='your_snowflake_db',
-            schema='your_snowflake_schema'
+            schema='public'
         )
         create_snowflake_tables(project_name)
         run_dbt_snowflake_models()
@@ -198,3 +201,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+```
