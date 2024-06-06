@@ -10,12 +10,82 @@
 - **Configuration Management**: Configuration details such as database connections and credentials are stored in environment variables and YAML configuration files (`profiles.yml`). This allows for easy customization and adaptation of the ETL pipeline for different environments.
 - **Lazy Evaluation**: Although not extensively utilized in this example, lazy evaluation principles can be applied to handle streams of data efficiently, especially in scenarios with large datasets.
 
-You're right. Let's include access to the staging PostgreSQL database in the `profiles.yml` file for dbt, and also import necessary modules in the Python script. Here's the updated version:
+
+### Directory Structure:
+```
+etl_pipeline/
+│
+├── main.py
+├── dbt_utils.py
+├── etl_utils.py
+└── dbt_profiles/
+    └── profiles.yml
+```
+
+### 1. `main.py`
+
+```python
+import os
+from etl_utils import set_on_prem_env, set_aws_rds_env, extract_data, load_data
+from dbt_utils import (
+    install_dbt,
+    init_dbt_project,
+    configure_dbt_profile,
+    create_dbt_models,
+    run_dbt_models,
+    configure_snowflake_profile,
+    create_snowflake_tables,
+    run_dbt_snowflake_models
+)
+
+def main():
+    try:
+        set_on_prem_env()
+        extract_data()
+
+        set_aws_rds_env()
+        load_data()
+        
+        install_dbt()
+        project_name = 'your_project'
+        init_dbt_project(project_name)
+        
+        configure_dbt_profile(
+            profile_name=project_name,
+            host='your_aws_rds_host',
+            user='your_aws_rds_user',
+            password='your_aws_rds_password',
+            dbname='your_aws_rds_db',
+            port='your_aws_rds_port',
+            schema='public'
+        )
+        create_dbt_models(project_name)
+        run_dbt_models()
+        
+        configure_snowflake_profile(
+            profile_name=project_name,
+            account='your_snowflake_account',
+            user='your_snowflake_user',
+            password='your_snowflake_password',
+            role='your_snowflake_role',
+            warehouse='your_snowflake_warehouse',
+            database='your_snowflake_db',
+            schema='public'
+        )
+        create_snowflake_tables(project_name)
+        run_dbt_snowflake_models()
+    except Exception as e:
+        print(f"ETL process failed: {e}")
+
+if __name__ == "__main__":
+    main()
+```
+
+### 2. `etl_utils.py`
 
 ```python
 import os
 import subprocess
-import yaml
 
 def set_on_prem_env():
     os.environ['PGHOST'] = 'onprem-db.example.com'
@@ -31,6 +101,22 @@ def set_aws_rds_env():
     os.environ['PGUSER'] = 'aws_rds_user'
     os.environ['PGPASSWORD'] = 'aws_rds_pwd'
 
+def extract_data():
+    # Implement the data extraction logic from the on-prem PostgreSQL database
+    pass
+
+def load_data():
+    # Implement the data loading logic into the AWS RDS PostgreSQL database
+    pass
+```
+
+### 3. `dbt_utils.py`
+
+```python
+import subprocess
+import yaml
+import os
+
 def install_dbt():
     subprocess.run(['pip', 'install', 'dbt'], check=True)
 
@@ -44,12 +130,12 @@ def configure_dbt_profile(profile_name, host, user, password, dbname, port, sche
             'outputs': {
                 'dev': {
                     'type': 'postgres',
-                    'host': localhost,
+                    'host': host,
                     'user': user,
                     'password': password,
                     'dbname': dbname,
-                    'port': 5432,
-                    'schema': public
+                    'port': port,
+                    'schema': schema
                 },
                 'staging': {
                     'type': 'postgres',
@@ -110,13 +196,13 @@ def configure_snowflake_profile(profile_name, account, user, password, role, war
             'outputs': {
                 'dev': {
                     'type': 'snowflake',
-                    'account': your_account.region.snowflakecomputing.com,
+                    'account': account,
                     'user': user,
                     'password': password,
-                    'role': retail_role,
+                    'role': role,
                     'warehouse': warehouse,
                     'database': database,
-                    'schema': public,
+                    'schema': schema,
                     'threads': 1,
                     'client_session_keep_alive': False
                 }
@@ -156,46 +242,39 @@ def run_dbt_snowflake_models():
     except subprocess.CalledProcessError as e:
         print(f"Error running dbt models: {e}")
         raise
+```
 
-def main():
-    try:
-        set_on_prem_env()
-        extract_data()
+### 4. `dbt_profiles/profiles.yml`.
 
-        set_aws_rds_env()
-        load_data()
-        
-        install_dbt()
-        project_name = 'your_project'
-        init_dbt_project(project_name)
-        
-        configure_dbt_profile(
-            profile_name=project_name,
-            host='your_aws_rds_host',
-            user='your_aws_rds_user',
-            password='your_aws_rds_password',
-            dbname='your_aws_rds_db',
-            port='your_aws_rds_port',
-            schema='public'
-        )
-        create_dbt_models(project_name)
-        run_dbt_models()
-        
-        configure_snowflake_profile(
-            profile_name=project_name,
-            account='your_snowflake_account',
-            user='your_snowflake_user',
-            password='your_snowflake_password',
-            role='your_snowflake_role',
-            warehouse='your_snowflake_warehouse',
-            database='your_snowflake_db',
-            schema='public'
-        )
-        create_snowflake_tables(project_name)
-        run_dbt_snowflake_models()
-    except Exception as e:
-        print(f"ETL process failed: {e}")
-
-if __name__ == "__main__":
-    main()
+```yaml
+your_project:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: your_aws_rds_host
+      user: your_aws_rds_user
+      password: your_aws_rds_password
+      dbname: your_aws_rds_db
+      port: your_aws_rds_port
+      schema: public
+    staging:
+      type: postgres
+      host: staging-db.example.com
+      user: your_staging_user
+      password: your_staging_password
+      dbname: retail_stg_db
+      port: 5432
+      schema: public
+    snowflake:
+      type: snowflake
+      account: your_account.region.snowflakecomputing.com
+      user: your_snowflake_user
+      password: your_snowflake_password
+      role: retail_role
+      warehouse: your_snowflake_warehouse
+      database: your_snowflake_db
+      schema: public
+      threads: 1
+      client_session_keep_alive: False
 ```
