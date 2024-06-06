@@ -4,13 +4,6 @@
 3. **Data Transformation**: Data cleaning and transformation are performed using dbt. The data is loaded into staging tables in the AWS RDS PostgreSQL database, where duplicates are removed, missing values are handled, and date formats are standardized.
 4. **Final Data Load**: The transformed data is loaded into Snowflake data warehouse. Final tables such as `dim_order`, `dim_customer`, and `fact_sales` are created, and data from staging tables is inserted into these tables.
 
-### Key Components:
-- **Functional Approach**: The ETL pipeline is implemented using a series of modular functions, each responsible for a specific task such as data extraction, loading, and transformation. This approach ensures clarity, reusability, and maintainability of the code.
-- **Error Handling**: Error handling is implemented using try-except blocks to catch and handle exceptions that may occur during data extraction, loading, or transformation. Error messages are printed to provide feedback on the execution status.
-- **Configuration Management**: Configuration details such as database connections and credentials are stored in environment variables and YAML configuration files (`profiles.yml`). This allows for easy customization and adaptation of the ETL pipeline for different environments.
-- **Lazy Evaluation**: Although not extensively utilized in this example, lazy evaluation principles can be applied to handle streams of data efficiently, especially in scenarios with large datasets.
-
-
 ### Directory Structure:
 ```
 etl_pipeline/
@@ -18,34 +11,45 @@ etl_pipeline/
 ├── main.py
 ├── dbt_utils.py
 ├── etl_utils.py
-└── dbt_profiles/
-    └── profiles.yml
+├── dbt_profiles/
+│   └── profiles.yml
+├── models/
+│   ├── dim_order.sql
+│   ├── dim_customer.sql
+│   ├── fact_sales.sql
+│   ├── stg_order.sql
+│   └── stg_sales.sql
+└── scripts/
+    ├── extract_data.sh
+    └── load_data.sh
 ```
 
 ### 1. `main.py`
+The main orchestration script.
 
 ```python
 import os
-from etl_utils import set_on_prem_env, set_aws_rds_env, extract_data, load_data
+from etl_utils import set_on_prem_env, set_aws_rds_env, run_shell_script
 from dbt_utils import (
     install_dbt,
     init_dbt_project,
     configure_dbt_profile,
-    create_dbt_models,
     run_dbt_models,
     configure_snowflake_profile,
-    create_snowflake_tables,
     run_dbt_snowflake_models
 )
 
 def main():
     try:
+        # Data Extraction
         set_on_prem_env()
-        extract_data()
+        run_shell_script('scripts/extract_data.sh')
 
+        # Data Loading
         set_aws_rds_env()
-        load_data()
+        run_shell_script('scripts/load_data.sh')
         
+        # Data Transformation
         install_dbt()
         project_name = 'your_project'
         init_dbt_project(project_name)
@@ -59,9 +63,9 @@ def main():
             port='your_aws_rds_port',
             schema='public'
         )
-        create_dbt_models(project_name)
         run_dbt_models()
         
+        # Final Data Load
         configure_snowflake_profile(
             profile_name=project_name,
             account='your_snowflake_account',
@@ -72,7 +76,6 @@ def main():
             database='your_snowflake_db',
             schema='public'
         )
-        create_snowflake_tables(project_name)
         run_dbt_snowflake_models()
     except Exception as e:
         print(f"ETL process failed: {e}")
@@ -82,6 +85,7 @@ if __name__ == "__main__":
 ```
 
 ### 2. `etl_utils.py`
+Utility functions for ETL tasks.
 
 ```python
 import os
@@ -101,16 +105,16 @@ def set_aws_rds_env():
     os.environ['PGUSER'] = 'aws_rds_user'
     os.environ['PGPASSWORD'] = 'aws_rds_pwd'
 
-def extract_data():
-    # Implement the data extraction logic from the on-prem PostgreSQL database
-    pass
-
-def load_data():
-    # Implement the data loading logic into the AWS RDS PostgreSQL database
-    pass
+def run_shell_script(script_path):
+    try:
+        subprocess.run(['bash', script_path], check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"Error running shell script {script_path}: {e}")
+        raise
 ```
 
 ### 3. `dbt_utils.py`
+Utility functions for dbt tasks.
 
 ```python
 import subprocess
@@ -152,36 +156,6 @@ def configure_dbt_profile(profile_name, host, user, password, dbname, port, sche
     with open(os.path.expanduser('~/.dbt/profiles.yml'), 'w') as f:
         yaml.dump(profile, f)
 
-def create_dbt_models(project_dir):
-    order_sql = """
-    -- models/stg_order.sql
-    with cleaned_order as (
-        select distinct
-            id,
-            customer_id,
-            coalesce(date::date, '1970-01-01'::date) as date,
-            amount
-        from {{ source('staging', 'order') }}
-    )
-    select * from cleaned_order;
-    """
-    sales_sql = """
-    -- models/stg_sales.sql
-    with cleaned_sales as (
-        select distinct
-            id,
-            order_id,
-            coalesce(date::date, '1970-01-01'::date) as date,
-            amount
-        from {{ source('staging', 'sales') }}
-    )
-    select * from cleaned_sales;
-    """
-    with open(f'{project_dir}/models/stg_order.sql', 'w') as f:
-        f.write(order_sql)
-    with open(f'{project_dir}/models/stg_sales.sql', 'w') as f:
-        f.write(sales_sql)
-
 def run_dbt_models():
     try:
         subprocess.run(['dbt', 'run'], check=True)
@@ -212,30 +186,6 @@ def configure_snowflake_profile(profile_name, account, user, password, role, war
     with open(os.path.expanduser('~/.dbt/profiles.yml'), 'w') as f:
         yaml.dump(profile, f)
 
-def create_snowflake_tables(project_dir):
-    dim_order_sql = """
-    -- models/dim_order.sql
-    insert into {{ ref('dim_order') }}
-    select * from {{ ref('stg_order') }};
-    """
-    dim_customer_sql = """
-    -- models/dim_customer.sql
-    insert into {{ ref('dim_customer') }}
-    select distinct customer_id as id, 'Unknown' as name, 'Unknown' as email
-    from {{ ref('stg_order') }};
-    """
-    fact_sales_sql = """
-    -- models/fact_sales.sql
-    insert into {{ ref('fact_sales') }}
-    select * from {{ ref('stg_sales') }};
-    """
-    with open(f'{project_dir}/models/dim_order.sql', 'w') as f:
-        f.write(dim_order_sql)
-    with open(f'{project_dir}/models/dim_customer.sql', 'w') as f:
-        f.write(dim_customer_sql)
-    with open(f'{project_dir}/models/fact_sales.sql', 'w') as f:
-        f.write(fact_sales_sql)
-
 def run_dbt_snowflake_models():
     try:
         subprocess.run(['dbt', 'run'], check=True)
@@ -244,7 +194,7 @@ def run_dbt_snowflake_models():
         raise
 ```
 
-### 4. `dbt_profiles/profiles.yml`.
+### 4. `dbt_profiles/profiles.yml`
 
 ```yaml
 your_project:
@@ -271,10 +221,78 @@ your_project:
       account: your_account.region.snowflakecomputing.com
       user: your_snowflake_user
       password: your_snowflake_password
-      role: retail_role
+      role: your_snowflake_role
       warehouse: your_snowflake_warehouse
       database: your_snowflake_db
       schema: public
       threads: 1
       client_session_keep_alive: False
+```
+
+### 5. `models/`
+
+#### `models/stg_order.sql`
+```sql
+-- models/stg_order.sql
+with cleaned_order as (
+    select distinct
+        id,
+        customer_id,
+        coalesce(date::date, '1970-01-01'::date) as date,
+        amount
+    from {{ source('staging', 'order') }}
+)
+select * from cleaned_order;
+```
+
+#### `models/stg_sales.sql`
+```sql
+-- models/stg_sales.sql
+with cleaned_sales as (
+    select distinct
+        id,
+        order_id,
+        coalesce(date::date, '1970-01-01'::date) as date,
+        amount
+    from {{ source('staging', 'sales') }}
+)
+select * from cleaned_sales;
+```
+
+#### `models/dim_order.sql`
+```sql
+-- models/dim_order.sql
+insert into {{ ref('dim_order') }}
+select * from {{ ref('stg_order') }};
+```
+
+#### `models/dim_customer.sql`
+```sql
+-- models/dim_customer.sql
+insert into {{ ref('dim_customer') }}
+select distinct customer_id as id, 'Unknown' as name, 'Unknown' as email
+from {{ ref('stg_order') }};
+```
+
+#### `models/fact_sales.sql`
+```sql
+-- models/fact_sales.sql
+insert into {{ ref('fact_sales') }}
+select * from {{ ref('stg_sales') }};
+```
+
+### 6. `scripts/extract_data.sh`
+Shell script to extract data from on-premises PostgreSQL.
+
+```bash
+#!/bin/bash
+pg_dump -h $PGHOST -U $PGUSER -d $PGDATABASE -F c -b -v -f /path/to/backup.dump
+```
+
+### 7. `scripts/load_data.sh`
+Shell script to load data into AWS RDS PostgreSQL.
+
+```bash
+#!/bin/bash
+pg_restore -h $PGHOST -U $PGUSER -d $PGDATABASE -v /path/to/backup.dump
 ```
